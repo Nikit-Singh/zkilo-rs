@@ -1,5 +1,5 @@
-use std::io::{Error, stdin};
-use std::io::{Read, self};
+use std::io::{self, Read};
+use std::io::{stdin, Error};
 use std::os::fd::AsRawFd;
 
 use termios::*;
@@ -11,24 +11,41 @@ fn disable_raw_mod(raw: Termios) -> Result<(), Error> {
 }
 
 fn enable_raw_mode() -> Result<Termios, Error> {
-    let fd  = stdin().as_raw_fd();
+    let fd = stdin().as_raw_fd();
     let mut raw = Termios::from_fd(fd)?;
     let orig_raw = raw;
 
     tcgetattr(fd, &mut raw)?;
-    raw.c_lflag &= !ECHO;
+    raw.c_iflag &= !(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+    raw.c_cflag |= CS8;
+    raw.c_oflag &= !(OPOST);
+    raw.c_lflag &= !(ECHO | ICANON | ISIG | IEXTEN);
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 1;
     tcsetattr(fd, TCSAFLUSH, &mut raw)?;
 
-    Ok(orig_raw) 
+    Ok(orig_raw)
 }
 
 fn main() {
     let mut stdin = io::stdin();
     let orig_raw = enable_raw_mode().unwrap();
 
-    let mut c = [0; 1];
-    while stdin.read(&mut c).unwrap() == 1 {
-        if c[0] == b'q' {
+    loop {
+        let byte = stdin.by_ref().bytes().next();
+
+        let c = match byte {
+            Some(ch) => ch.ok().unwrap() as char,
+            None => '\0',
+        };
+
+        if c.is_ascii_control() {
+            println!("{}\r\n", c as u8);
+        } else {
+            println!("{},({})\r\n", c as u8, c);
+        }
+
+        if c == 'q' {
             break;
         }
     }
