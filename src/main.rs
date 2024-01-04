@@ -1,8 +1,14 @@
-use std::io::stdin;
+use std::io::{stdin, Write};
+use std::io::{self, Error, Read};
 use std::os::fd::AsRawFd;
-use std::io::{self, Read, Error};
+use std::process::exit;
 
 use termios::*;
+
+// #define CTRL_KEY(k) ((k) & 0x1f)
+fn ctrl_key(k: char) -> u8 {
+    k as u8 & 0x1f //00011111
+}
 
 fn enable_raw_mode() -> Result<Termios, Error> {
     let fd = stdin().as_raw_fd();
@@ -21,34 +27,46 @@ fn enable_raw_mode() -> Result<Termios, Error> {
     Ok(orig_raw)
 }
 
-fn disable_raw_mod(raw: Termios) -> Result<(), Error> {
+fn disable_raw_mod(raw: &Termios) -> Result<(), Error> {
     let mut raw = raw;
     tcsetattr(stdin().as_raw_fd(), TCSAFLUSH, &mut raw)?;
     Ok(())
 }
 
-fn main() {
-    let mut stdin = io::stdin();
-    let orig_raw = enable_raw_mode().unwrap();
+fn editor_read_key() -> char {
+    let byte = stdin().by_ref().bytes().next();
 
-    loop {
-        let byte = stdin.by_ref().bytes().next();
-
-        let c = match byte {
-            Some(ch) => ch.ok().unwrap() as char,
-            None => '\0',
-        };
-
-        if c.is_ascii_control() {
-            println!("{}\r", c as u8);
-        } else {
-            println!("{},({})\r", c as u8, c);
-        }
-
-        if c == 'q' {
-            break;
-        }
+    match byte {
+        Some(ch) => ch.ok().unwrap() as char,
+        None => '\0',
     }
+}
 
-    disable_raw_mod(orig_raw).unwrap();
+fn editor_process_key(raw: &Termios) {
+    let c = editor_read_key();
+    let ctrl_q = ctrl_key('q');
+
+    match c as u8 {
+        x if x == ctrl_q => {
+            editor_refresh_screen();
+            disable_raw_mod(&raw).unwrap();
+            exit(0);
+        },
+        d => println!("{}", d as char),
+    }
+}
+
+fn editor_refresh_screen() {
+    let mut out = io::stdout();
+    let out = out.by_ref();
+    out.write(b"\x1b[2J").unwrap();
+    out.write(b"\x1b[H").unwrap();
+}
+
+fn main() {
+    let raw = enable_raw_mode().unwrap();
+    loop {
+        editor_refresh_screen();
+        editor_process_key(&raw);
+    }
 }
