@@ -1,14 +1,8 @@
-use std::io::{self, Read};
-use std::io::{stdin, Error};
+use std::io::stdin;
 use std::os::fd::AsRawFd;
+use std::io::{self, Read, Error};
 
 use termios::*;
-
-fn disable_raw_mod(raw: Termios) -> Result<(), Error> {
-    let mut raw = raw;
-    tcsetattr(stdin().as_raw_fd(), TCSAFLUSH, &mut raw)?;
-    Ok(())
-}
 
 fn enable_raw_mode() -> Result<Termios, Error> {
     let fd = stdin().as_raw_fd();
@@ -27,6 +21,12 @@ fn enable_raw_mode() -> Result<Termios, Error> {
     Ok(orig_raw)
 }
 
+fn disable_raw_mod(raw: Termios) -> Result<(), Error> {
+    let mut raw = raw;
+    tcsetattr(stdin().as_raw_fd(), TCSAFLUSH, &mut raw)?;
+    Ok(())
+}
+
 fn main() {
     let mut stdin = io::stdin();
     let orig_raw = enable_raw_mode().unwrap();
@@ -40,9 +40,9 @@ fn main() {
         };
 
         if c.is_ascii_control() {
-            println!("{}\r\n", c as u8);
+            println!("{}\r", c as u8);
         } else {
-            println!("{},({})\r\n", c as u8, c);
+            println!("{},({})\r", c as u8, c);
         }
 
         if c == 'q' {
